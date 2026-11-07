@@ -1,0 +1,36 @@
+{
+  "name": "delivery-route-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live delivery tracking: an Expo map client and a NestJS API over OpenStreetMap, OSRM and Nominatim.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @tracker/geo && npm run build -w @tracker/api",
+    "dev": "concurrently -n api,web -c blue,green \"npm run start:dev -w @tracker/api\" \"npm run web -w @tracker/mobile\"",
+    "start": "npm run start -w @tracker/api",
+    "test": "npm run test -w @tracker/geo && npm run test -w @tracker/api && npm run test -w @tracker/mobile",
+    "test:e2e": "npm run test:e2e -w @tracker/api",
+    "test:web": "playwright test",
+    "lint": "eslint \"packages/**/*.ts\" \"apps/api/**/*.ts\" \"apps/mobile/**/*.{ts,tsx}\" \"e2e/**/*.ts\" \"playwright.config.ts\"",
+    "typecheck": "npm run typecheck -w @tracker/geo && npm run typecheck -w @tracker/api && npm run typecheck -w @tracker/mobile",
+    "format": "prettier --write \"packages/**/*.ts\" \"apps/**/*.{ts,tsx}\" \"e2e/**/*.ts\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@playwright/test": "^1.56.1",
+    "@types/jest": "^29.5.14",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.46.0"
+  }
+}

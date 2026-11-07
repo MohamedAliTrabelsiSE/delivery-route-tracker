@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Delivery Route Tracker",
+    "slug": "delivery-route-tracker",
+    "scheme": "delivery-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Share your position while you drive the tour."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

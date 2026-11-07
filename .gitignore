@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.expo/
+.expo-shared/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+web-build/
