@@ -6,7 +6,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "web": {
       "bundler": "metro",
       "output": "single"
@@ -18,7 +17,8 @@
         {
           "locationWhenInUsePermission": "Share your position while you drive the tour."
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": false

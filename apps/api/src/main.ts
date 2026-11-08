@@ -14,10 +14,12 @@ async function bootstrap(): Promise<void> {
   }
   const app = configureApp(await NestFactory.create<NestExpressApplication>(AppModule));
   const config = app.get<AppConfig>(APP_CONFIG);
-  await app.listen(config.port);
+  await app.listen(config.port, '0.0.0.0');
   const logger = new Logger('Bootstrap');
   logger.log(`API http://localhost:${config.port}  docs /docs  live ws /live`);
-  logger.log(`Routing: ${config.routingProvider}  geocoding: ${config.geocodingProvider}  simulator: ${config.simulateDriver}`);
+  logger.log(
+    `Routing: ${config.routingProvider}  geocoding: ${config.geocodingProvider}  simulator: ${config.simulateDriver}`,
+  );
 }
 
 void bootstrap();
