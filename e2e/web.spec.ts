@@ -25,6 +25,18 @@ test('search picks an address label', async ({ page }) => {
   await page.screenshot({ path: 'docs/screenshots/pick.png', fullPage: true });
 });
 
+test('navigation shows the next instruction', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('navigate-button').click();
+  await expect(page.getByTestId('nav-step')).not.toHaveText('Loading the leg…');
+  await page
+    .locator('[data-testid="map-canvas"]:visible .leaflet-tile-loaded')
+    .first()
+    .waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: 'docs/screenshots/navigate.png', fullPage: true });
+});
+
 test('optimize changes the stop order', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('stop-list')).toContainText('Eiffel Tower');
