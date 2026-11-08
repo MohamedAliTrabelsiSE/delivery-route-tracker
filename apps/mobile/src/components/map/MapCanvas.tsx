@@ -1,2 +1,2 @@
 export { MapCanvas } from './MapCanvas.native';
-export type { MapCanvasProps, MapMarker, MapPolyline } from './types';
+export type { MapCanvasProps, MapCircle, MapMarker, MapPolygon, MapPolyline } from './types';

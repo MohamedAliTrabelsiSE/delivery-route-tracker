@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { liveUrl } from '../config';
 import { startLiveSession, type ConnectionStatus, type LiveSocket } from '../services/live';
-import type { DriverFix } from '../types';
+import type { DriverFix, GeofenceNotice } from '../types';
 
 export interface LiveTarget {
   tourId?: string;
@@ -21,6 +21,7 @@ export function useLiveDriver(
   const [driver, setDriver] = useState<DriverFix | null>(null);
   const [eta, setEta] = useState<EtaUpdate | null>(null);
   const [routePolyline, setRoutePolyline] = useState<string | null>(null);
+  const [geofences, setGeofences] = useState<GeofenceNotice[]>([]);
 
   const tourId = target?.tourId;
   const trackingCode = target?.trackingCode;
@@ -49,10 +50,16 @@ export function useLiveDriver(
         if (frame.event === 'route_updated') {
           setRoutePolyline((frame.data as { polyline?: string }).polyline ?? null);
         }
+        if (frame.event === 'geofence') {
+          const data = frame.data as GeofenceNotice;
+          if (!trackingCode || data.trackingCode === trackingCode) {
+            setGeofences((previous) => [...previous, data].slice(-40));
+          }
+        }
       },
     });
     return () => session.close();
   }, [tourId, trackingCode, url]);
 
-  return { status, driver, eta, routePolyline };
+  return { status, driver, eta, routePolyline, geofences };
 }

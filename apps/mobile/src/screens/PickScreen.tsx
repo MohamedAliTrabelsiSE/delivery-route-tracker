@@ -1,11 +1,11 @@
-import { regionFromPoints } from '@tracker/geo';
+import { pointInPolygon, regionFromPoints } from '@tracker/geo';
 import * as Location from 'expo-location';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 import { MapCanvas } from '../components/map/MapCanvas';
-import { Button, colors } from '../components/ui';
-import { DEFAULT_TRACKING_CODE, DEPOT } from '../config';
-import { reverseGeocode, searchPlaces, setDropoff } from '../services/api';
+import { Button, Note, Screen, Title, colors, layout } from '../components/ui';
+import { DEFAULT_TRACKING_CODE, DEMO_TOUR_ID, DEPOT } from '../config';
+import { getTour, reverseGeocode, searchPlaces, setDropoff } from '../services/api';
 import type { Place } from '../types';
 
 export function PickScreen() {
@@ -15,6 +15,18 @@ export function PickScreen() {
   const [label, setLabel] = useState('Drag the pin or search for an address');
   const [results, setResults] = useState<Place[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [zone, setZone] = useState<{ lat: number; lng: number }[]>([]);
+
+  useEffect(() => {
+    void Promise.resolve(getTour(DEMO_TOUR_ID))
+      .then((tour) => {
+        if (tour?.deliveryZone && tour.deliveryZone.length > 2) setZone(tour.deliveryZone);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const outside = zone.length > 2 && !pointInPolygon(pin, zone);
+  const framed = zone.length > 2 ? [pin, ...zone] : [pin];
 
   async function apply(point: { lat: number; lng: number }, nextLabel?: string): Promise<void> {
     setPin(point);
@@ -55,65 +67,64 @@ export function PickScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.title}>Drop-off pin</Text>
-      <TextInput
-        testID="search"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search an address"
-        style={styles.input}
-      />
-      <View style={styles.row}>
-        <Button label="Search" testID="search-button" onPress={() => void search()} />
-        <Button label="My location" testID="my-location-button" onPress={() => void useMyLocation()} />
-      </View>
-      <Text testID="address-label" style={styles.label}>
-        {label}
-      </Text>
-      <View style={styles.map}>
-        <MapCanvas
-          region={regionFromPoints([pin])}
-          polylines={[]}
-          markers={[{ id: 'pin', lat: pin.lat, lng: pin.lng, title: label, kind: 'pin', draggable: true }]}
-          onPress={(point) => void apply(point)}
-          onDragEnd={(_id, point) => void apply(point)}
+    <Screen>
+      <ScrollView contentContainerStyle={layout.scroll}>
+        <Title>Drop-off pin</Title>
+        <TextInput
+          testID="search"
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search an address"
+          placeholderTextColor={colors.muted}
+          style={layout.field}
         />
-      </View>
-      <Text style={styles.note}>Map data © OpenStreetMap contributors</Text>
-      {results.map((place) => (
-        <Text key={`${place.lat},${place.lng}`} style={styles.note}>
-          {place.label}
+        <View style={layout.row}>
+          <Button label="Search" testID="search-button" onPress={() => void search()} />
+          <Button
+            label="My location"
+            testID="my-location-button"
+            onPress={() => void useMyLocation()}
+          />
+        </View>
+        <Text
+          testID="address-label"
+          style={{ fontSize: 16, fontWeight: '700', color: colors.text }}
+        >
+          {label}
         </Text>
-      ))}
-      <TextInput
-        testID="save-code"
-        value={code}
-        autoCapitalize="characters"
-        onChangeText={setCode}
-        placeholder="Tracking code"
-        style={styles.input}
-      />
-      <Button label="Save pin" testID="save-button" onPress={() => void save()} />
-      {message ? <Text testID="save-message">{message}</Text> : null}
-    </ScrollView>
+        {outside ? (
+          <Text testID="zone-warning" style={layout.warn}>
+            Outside the delivery zone
+          </Text>
+        ) : null}
+        <View style={layout.map}>
+          <MapCanvas
+            region={regionFromPoints(framed)}
+            polylines={[]}
+            polygons={zone.length > 2 ? [{ id: 'zone', coordinates: zone, color: '#1d4ed8' }] : []}
+            markers={[
+              { id: 'pin', lat: pin.lat, lng: pin.lng, title: label, kind: 'pin', draggable: true },
+            ]}
+            onPress={(point) => void apply(point)}
+            onDragEnd={(_id, point) => void apply(point)}
+          />
+        </View>
+        <Note>Map data © OpenStreetMap contributors</Note>
+        {results.map((place) => (
+          <Note key={`${place.lat},${place.lng}`}>{place.label}</Note>
+        ))}
+        <TextInput
+          testID="save-code"
+          value={code}
+          autoCapitalize="characters"
+          onChangeText={setCode}
+          placeholder="Tracking code"
+          placeholderTextColor={colors.muted}
+          style={layout.field}
+        />
+        <Button label="Save pin" testID="save-button" onPress={() => void save()} />
+        {message ? <Text testID="save-message">{message}</Text> : null}
+      </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  page: { padding: 16, gap: 12, backgroundColor: colors.bg },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text },
-  input: {
-    backgroundColor: '#fff',
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-  },
-  row: { flexDirection: 'row', gap: 8 },
-  label: { fontSize: 16, fontWeight: '600', color: colors.text },
-  note: { color: colors.muted },
-  map: { height: 320, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dbe4ee' },
-});

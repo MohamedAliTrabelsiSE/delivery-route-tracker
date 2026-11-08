@@ -2,9 +2,9 @@ import { decodePolyline, navigationProgress, regionFromPoints } from '@tracker/g
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { MapCanvas } from '../components/map/MapCanvas';
-import { Button, Card, colors } from '../components/ui';
+import { Badge, Button, Card, Note, Screen, Title, layout } from '../components/ui';
 import { DEMO_TOUR_ID, DEPOT } from '../config';
 import { useOffRoute } from '../hooks/useOffRoute';
 import { getNavigation } from '../services/api';
@@ -64,51 +64,68 @@ export function NavigateScreen({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.title}>To {stopId || 'stop'}</Text>
-      <View style={styles.map}>
-        <MapCanvas
-          region={line.length > 0 ? regionFromPoints([origin, ...line]) : undefined}
-          polylines={line.length > 1 ? [{ id: 'leg', coordinates: line }] : []}
-          markers={[
-            { id: 'origin', lat: origin.lat, lng: origin.lng, title: 'You', kind: 'driver' },
-            ...(destination
-              ? [{ id: 'end', lat: destination.lat, lng: destination.lng, title: stopId, kind: 'destination' as const }]
-              : []),
-          ]}
-        />
-      </View>
-      <Card>
-        <Text testID="nav-step" style={styles.step}>
-          {step?.instruction ?? 'Loading the leg…'}
-        </Text>
-        <Text style={styles.note}>
-          {progress ? `${progress.remainingKm.toFixed(1)} km left` : ''}
-          {leg ? ` · ${leg.durationMin.toFixed(0)} min` : ''}
-        </Text>
-        {offRoute ? (
-          <Text testID="off-route" style={styles.warn}>
-            Off the route. Recalculating shortly.
+    <Screen>
+      <ScrollView contentContainerStyle={layout.scroll}>
+        <Title>To {stopId ? stopId.charAt(0).toUpperCase() + stopId.slice(1) : 'stop'}</Title>
+        <View style={layout.map}>
+          <MapCanvas
+            region={line.length > 0 ? regionFromPoints([origin, ...line]) : undefined}
+            polylines={
+              line.length > 1
+                ? [{ id: 'leg', coordinates: line, color: offRoute ? '#b45309' : '#1d4ed8' }]
+                : []
+            }
+            markers={[
+              {
+                id: 'origin',
+                lat: origin.lat,
+                lng: origin.lng,
+                title: 'You',
+                kind: 'driver',
+                label: 'You',
+              },
+              ...(destination
+                ? [
+                    {
+                      id: 'end',
+                      lat: destination.lat,
+                      lng: destination.lng,
+                      title: stopId,
+                      kind: 'destination' as const,
+                      label: 'End',
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </View>
+        <Card>
+          <View style={layout.row}>
+            <Badge label={offRoute ? 'Rerouting' : 'Next'} tone={offRoute ? 'warn' : 'accent'} />
+            {progress ? <Note>{progress.remainingKm.toFixed(1)} km left</Note> : null}
+            {leg ? <Note>{leg.durationMin.toFixed(0)} min</Note> : null}
+          </View>
+          <Text
+            testID="nav-step"
+            style={{ fontSize: 28, fontWeight: '800', color: '#0f172a', letterSpacing: -0.4 }}
+          >
+            {step?.instruction ?? 'Loading the leg…'}
           </Text>
-        ) : null}
-      </Card>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <View style={styles.row}>
-        <Button label="Recalculate" testID="reroute-button" onPress={() => void load()} />
-        <Button label="Open in maps" testID="external-maps-button" onPress={openExternal} />
-      </View>
-      <Text style={styles.note}>Map data © OpenStreetMap contributors</Text>
-    </ScrollView>
+          {offRoute ? (
+            <Text testID="off-route" style={layout.warn}>
+              Off the route. Recalculating shortly.
+            </Text>
+          ) : (
+            <Note>Stay on the highlighted road. The leg refreshes if you leave it.</Note>
+          )}
+        </Card>
+        {error ? <Text style={layout.error}>{error}</Text> : null}
+        <View style={layout.row}>
+          <Button label="Recalculate" testID="reroute-button" onPress={() => void load()} />
+          <Button label="Open in maps" testID="external-maps-button" onPress={openExternal} />
+        </View>
+        <Note>Map data © OpenStreetMap contributors</Note>
+      </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  page: { padding: 16, gap: 12, backgroundColor: colors.bg },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text },
-  map: { height: 320, borderRadius: 12, overflow: 'hidden', backgroundColor: '#dbe4ee' },
-  step: { fontSize: 18, fontWeight: '700', color: colors.text },
-  note: { color: colors.muted },
-  warn: { color: colors.warn, fontWeight: '600' },
-  error: { color: colors.danger },
-  row: { flexDirection: 'row', gap: 8 },
-});

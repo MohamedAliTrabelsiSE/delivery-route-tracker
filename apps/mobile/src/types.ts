@@ -5,7 +5,8 @@ export interface Stop {
   lng: number;
   trackingCode: string | null;
   kind: 'depot' | 'dropoff';
-  status: 'pending';
+  status: 'pending' | 'arriving' | 'arrived';
+  geofenceRadiusKm?: number;
 }
 
 export interface RouteStep {
@@ -35,7 +36,15 @@ export interface Tour {
   name: string;
   driverId: string;
   stops: Stop[];
+  deliveryZone?: { lat: number; lng: number }[];
   route: ComputedRoute | null;
+}
+
+export interface GeofenceNotice {
+  tourId: string;
+  stopId: string;
+  trackingCode: string | null;
+  type: 'enter' | 'exit';
 }
 
 export interface NavigationLeg {
@@ -63,6 +72,7 @@ export interface TrackingSnapshot {
   polyline: string;
   etaMin: number;
   distanceKm: number;
+  geofenceRadiusKm?: number;
 }
 
 export interface Place {
