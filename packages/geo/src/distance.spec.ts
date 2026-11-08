@@ -1,4 +1,5 @@
 import {
+  bearingDegrees,
   distanceToPolylineKm,
   haversineKm,
   isOffRoute,
@@ -24,6 +25,14 @@ describe('haversineKm', () => {
   });
 });
 
+describe('bearingDegrees', () => {
+  it('points north, east, and back toward the start', () => {
+    expect(bearingDegrees({ lat: 0, lng: 0 }, { lat: 1, lng: 0 })).toBeCloseTo(0, 5);
+    expect(bearingDegrees({ lat: 0, lng: 0 }, { lat: 0, lng: 1 })).toBeCloseTo(90, 5);
+    expect(bearingDegrees({ lat: 0, lng: 0 }, { lat: 0, lng: 0 })).toBeCloseTo(0, 5);
+  });
+});
+
 describe('pathLengthKm', () => {
   it('sums the segments', () => {
     const points = [
@@ -31,7 +40,10 @@ describe('pathLengthKm', () => {
       { lat: 1, lng: 0 },
       { lat: 1, lng: 1 },
     ];
-    expect(pathLengthKm(points)).toBeCloseTo(haversineKm(points[0], points[1]) + haversineKm(points[1], points[2]), 9);
+    expect(pathLengthKm(points)).toBeCloseTo(
+      haversineKm(points[0], points[1]) + haversineKm(points[1], points[2]),
+      9,
+    );
     expect(pathLengthKm([])).toBe(0);
     expect(pathLengthKm([points[0]])).toBe(0);
   });
@@ -62,7 +74,10 @@ describe('distanceToPolylineKm', () => {
   });
 
   it('handles a zero-length segment', () => {
-    const doubled = [{ lat: 48.85, lng: 2.3 }, { lat: 48.85, lng: 2.3 }];
+    const doubled = [
+      { lat: 48.85, lng: 2.3 },
+      { lat: 48.85, lng: 2.3 },
+    ];
     expect(distanceToPolylineKm({ lat: 48.85, lng: 2.3 }, doubled)).toBe(0);
   });
 });

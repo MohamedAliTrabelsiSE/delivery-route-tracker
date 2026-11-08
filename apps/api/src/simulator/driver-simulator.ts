@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { decodePolyline, pathLengthKm, pointAlongKm } from '@tracker/geo';
+import { bearingDegrees, decodePolyline, pathLengthKm, pointAlongKm } from '@tracker/geo';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { LiveService } from '../live/live.service';
 import { TourStore } from '../tours/tour.store';
@@ -20,10 +20,16 @@ export class DriverSimulator {
     const line = tour?.route ? decodePolyline(tour.route.polyline) : [];
     if (!tour || line.length < 2) return null;
     const length = Math.max(pathLengthKm(line), 0.001);
-    const advanceKm = (this.config.averageSpeedKmh / 3600) * (this.config.simulatorIntervalMs / 1000);
+    const advanceKm =
+      (this.config.averageSpeedKmh / 3600) * (this.config.simulatorIntervalMs / 1000);
     this.cursorKm = (this.cursorKm + advanceKm) % length;
     const point = pointAlongKm(line, this.cursorKm);
-    await this.live.updatePosition(tour.driverId, { lat: point.lat, lng: point.lng });
+    const ahead = pointAlongKm(line, Math.min(length, this.cursorKm + 0.05));
+    await this.live.updatePosition(tour.driverId, {
+      lat: point.lat,
+      lng: point.lng,
+      heading: bearingDegrees(point, ahead),
+    });
     return point;
   }
 }
@@ -40,7 +46,9 @@ export class SimulatorRunner implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!this.config.simulateDriver) return;
-    this.logger.log(`Simulating driver ${this.config.driverId} every ${this.config.simulatorIntervalMs}ms`);
+    this.logger.log(
+      `Simulating driver ${this.config.driverId} every ${this.config.simulatorIntervalMs}ms`,
+    );
     this.timer = setInterval(() => {
       void this.simulator.step().catch((error: Error) => this.logger.warn(error.message));
     }, this.config.simulatorIntervalMs);

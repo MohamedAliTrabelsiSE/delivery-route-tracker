@@ -15,7 +15,9 @@ function client(): LiveClient & { events: Array<{ event: string; data: unknown }
   return { events, send: (event, data) => events.push({ event, data }) };
 }
 
-async function live(env: Record<string, string> = {}): Promise<{ service: LiveService; clock: ReturnType<typeof fixedClock> }> {
+async function live(
+  env: Record<string, string> = {},
+): Promise<{ service: LiveService; clock: ReturnType<typeof fixedClock>; store: TourStore }> {
   const clock = fixedClock(1_000_000);
   const config = loadConfig({
     ROUTING_PROVIDER: 'mock',
@@ -28,11 +30,16 @@ async function live(env: Record<string, string> = {}): Promise<{ service: LiveSe
   const store = new TourStore();
   const tours = new ToursService(
     store,
-    new RoutingService(config, new OsrmRouter('http://unused', jest.fn()), new StraightLineRouter(25), new MockRouter(25)),
+    new RoutingService(
+      config,
+      new OsrmRouter('http://unused', jest.fn()),
+      new StraightLineRouter(25),
+      new MockRouter(25),
+    ),
   );
   await tours.onModuleInit();
   const tracking = new TrackingService(store, tours, config);
-  return { service: new LiveService(store, tours, tracking, config, clock), clock };
+  return { service: new LiveService(store, tours, tracking, config, clock), clock, store };
 }
 
 describe('throttles', () => {
@@ -58,7 +65,9 @@ describe('throttles', () => {
 describe('LiveService', () => {
   it('rejects an unknown driver', async () => {
     const { service } = await live();
-    await expect(service.updatePosition('nobody', { lat: 1, lng: 2 })).rejects.toThrow(NotFoundException);
+    await expect(service.updatePosition('nobody', { lat: 1, lng: 2 })).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('broadcasts a position and an ETA to tour and tracking subscribers', async () => {
@@ -72,7 +81,11 @@ describe('LiveService', () => {
     service.subscribe(tourSub, { tourId: 'tour-paris' });
     service.subscribe(parcelSub, { trackingCode: 'TRK-1001' });
 
-    const result = await service.updatePosition('driver-1', { lat: 48.8566, lng: 2.3522, heading: 90 });
+    const result = await service.updatePosition('driver-1', {
+      lat: 48.8566,
+      lng: 2.3522,
+      heading: 90,
+    });
     expect(result).toEqual({ accepted: true });
     expect(tourSub.events.map((event) => event.event)).toEqual(
       expect.arrayContaining(['driver_position', 'eta_updated']),
@@ -101,8 +114,13 @@ describe('LiveService', () => {
   });
 
   it('throttles a duplicate fix', async () => {
-    const { service } = await live({ POSITION_MIN_INTERVAL_MS: '10000', POSITION_MIN_MOVE_KM: '1' });
-    expect((await service.updatePosition('driver-1', { lat: 48.85, lng: 2.35 })).accepted).toBe(true);
+    const { service } = await live({
+      POSITION_MIN_INTERVAL_MS: '10000',
+      POSITION_MIN_MOVE_KM: '1',
+    });
+    expect((await service.updatePosition('driver-1', { lat: 48.85, lng: 2.35 })).accepted).toBe(
+      true,
+    );
     expect(await service.updatePosition('driver-1', { lat: 48.85001, lng: 2.35001 })).toEqual({
       accepted: false,
       reason: 'throttled',
@@ -117,6 +135,55 @@ describe('LiveService', () => {
     expect(() => service.subscribe(sub, { trackingCode: 'NOPE' })).toThrow(/Unknown tracking code/);
     expect(() => service.subscribe(sub, { tourId: 4 })).toThrow();
     service.remove(sub);
+  });
+
+  it('marks a stop arriving when the driver enters its circle, then arrived on the way out', async () => {
+    const { service, store } = await live();
+    const parcel = client();
+    const tourSub = client();
+    service.add(parcel);
+    service.add(tourSub);
+    service.subscribe(parcel, { trackingCode: 'TRK-1001' });
+    service.subscribe(tourSub, { tourId: 'tour-paris' });
+
+    await service.updatePosition('driver-1', { lat: 48.8606, lng: 2.3376 });
+    const entered = parcel.events.find((event) => event.event === 'geofence');
+    expect(entered?.data).toMatchObject({
+      stopId: 'louvre',
+      trackingCode: 'TRK-1001',
+      type: 'enter',
+    });
+    expect(store.mutable('tour-paris')?.stops.find((stop) => stop.id === 'louvre')?.status).toBe(
+      'arriving',
+    );
+    expect(tourSub.events.some((event) => event.event === 'geofence')).toBe(true);
+
+    parcel.events.length = 0;
+    await service.updatePosition('driver-1', { lat: 49.1, lng: 2.35 });
+    expect(parcel.events.find((event) => event.event === 'geofence')?.data).toMatchObject({
+      stopId: 'louvre',
+      type: 'exit',
+    });
+    expect(store.mutable('tour-paris')?.stops.find((stop) => stop.id === 'louvre')?.status).toBe(
+      'arrived',
+    );
+  });
+
+  it('skips a stop whose geofence radius is zero', async () => {
+    const { service, store } = await live();
+    const depot = store.mutable('tour-paris')?.stops.find((stop) => stop.id === 'depot');
+    if (!depot) throw new Error('missing depot');
+    depot.geofenceRadiusKm = 0;
+    const sub = client();
+    service.add(sub);
+    service.subscribe(sub, { tourId: 'tour-paris' });
+    await service.updatePosition('driver-1', { lat: depot.lat, lng: depot.lng });
+    expect(
+      sub.events.filter(
+        (event) =>
+          event.event === 'geofence' && (event.data as { stopId: string }).stopId === 'depot',
+      ),
+    ).toEqual([]);
   });
 
   it('ignores a broadcast to a removed client', async () => {

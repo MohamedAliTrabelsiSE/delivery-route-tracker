@@ -1,5 +1,12 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { decodePolyline, encodePolyline, haversineKm, nearestVertex, pathLengthKm } from '@tracker/geo';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  decodePolyline,
+  encodePolyline,
+  haversineKm,
+  nearestVertex,
+  pathLengthKm,
+  pointInPolygon,
+} from '@tracker/geo';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { roundKm, roundMin } from '../routing/route.types';
 import { ToursService } from '../tours/tours.service';
@@ -13,6 +20,7 @@ export interface TrackingSnapshot {
   polyline: string;
   etaMin: number;
   distanceKm: number;
+  geofenceRadiusKm: number;
 }
 
 @Injectable()
@@ -42,15 +50,23 @@ export class TrackingService {
       polyline: encodePolyline(remaining),
       etaMin: roundMin((distanceKm / this.config.averageSpeedKmh) * 60),
       distanceKm: roundKm(distanceKm),
+      geofenceRadiusKm: found.stop.geofenceRadiusKm,
     };
   }
 
-  async setLocation(code: string, lat: number, lng: number, label?: string): Promise<TrackingSnapshot> {
-    try {
-      this.store.moveStop(code, lat, lng, label);
-    } catch {
-      throw new NotFoundException(`Tracking code ${code} not found`);
+  async setLocation(
+    code: string,
+    lat: number,
+    lng: number,
+    label?: string,
+  ): Promise<TrackingSnapshot> {
+    const existing = this.store.findStop(code);
+    if (!existing) throw new NotFoundException(`Tracking code ${code} not found`);
+    const zone = existing.tour.deliveryZone;
+    if (zone.length >= 3 && !pointInPolygon({ lat, lng }, zone)) {
+      throw new BadRequestException('Drop-off is outside the delivery zone');
     }
+    this.store.moveStop(code, lat, lng, label);
     const found = this.store.findStop(code);
     if (!found) throw new NotFoundException(`Tracking code ${code} not found`);
     const fix = this.store.fix(found.tour.driverId);

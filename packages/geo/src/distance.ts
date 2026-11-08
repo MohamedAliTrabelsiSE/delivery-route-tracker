@@ -91,6 +91,16 @@ function distanceToSegmentKm(point: LatLng, a: LatLng, b: LatLng): number {
   return Math.hypot(px - t * bx, py - t * by);
 }
 
+/** Clockwise bearing from north, in degrees, from `from` toward `to`. */
+export function bearingDegrees(from: LatLng, to: LatLng): number {
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
 function toRad(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }

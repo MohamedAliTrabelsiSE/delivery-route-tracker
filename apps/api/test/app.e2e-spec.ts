@@ -45,13 +45,21 @@ describe('Delivery API (e2e)', () => {
     await app.close();
   });
 
-  function openLive(): Promise<{ ws: WebSocket; frames: Frame[]; waitFor: (event: string) => Promise<Frame> }> {
+  function openLive(): Promise<{
+    ws: WebSocket;
+    frames: Frame[];
+    waitFor: (event: string) => Promise<Frame>;
+  }> {
     const frames: Frame[] = [];
     const ws = new WebSocket(base.replace('http', 'ws') + '/live');
     ws.on('message', (raw) => frames.push(JSON.parse(String(raw)) as Frame));
     const waitFor = (event: string): Promise<Frame> =>
       new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`no ${event}; got ${frames.map((frame) => frame.event).join(',')}`)), 4000);
+        const timer = setTimeout(
+          () =>
+            reject(new Error(`no ${event}; got ${frames.map((frame) => frame.event).join(',')}`)),
+          4000,
+        );
         const check = (): void => {
           const found = frames.find((frame) => frame.event === event);
           if (found) {
@@ -70,7 +78,12 @@ describe('Delivery API (e2e)', () => {
 
   it('serves health and the openapi document', async () => {
     const health = await request(base).get('/health').expect(200);
-    expect(health.body).toMatchObject({ status: 'ok', routing: 'mock', geocoding: 'mock', tourId: 'tour-paris' });
+    expect(health.body).toMatchObject({
+      status: 'ok',
+      routing: 'mock',
+      geocoding: 'mock',
+      tourId: 'tour-paris',
+    });
     const docs = await request(base).get('/docs-json').expect(200);
     expect(docs.body.paths['/tours/{id}/optimize']).toBeDefined();
   });
@@ -79,7 +92,10 @@ describe('Delivery API (e2e)', () => {
     const search = await request(base).get('/geocode/search').query({ q: 'louvre' }).expect(200);
     expect(search.body.results[0].label).toContain('Louvre');
     await request(base).get('/geocode/search').query({ q: 'a' }).expect(400);
-    const reverse = await request(base).get('/geocode/reverse').query({ lat: 48.8584, lng: 2.2945 }).expect(200);
+    const reverse = await request(base)
+      .get('/geocode/reverse')
+      .query({ lat: 48.8584, lng: 2.2945 })
+      .expect(200);
     expect(reverse.body.result.label).toContain('Eiffel');
   });
 
@@ -107,7 +123,10 @@ describe('Delivery API (e2e)', () => {
     live.ws.send(JSON.stringify({ event: 'subscribe', data: { trackingCode: 'TRK-1001' } }));
     await live.waitFor('subscribed');
 
-    await request(base).post('/drivers/driver-1/position').send({ lat: 48.8566, lng: 2.3522, heading: 10 }).expect(201);
+    await request(base)
+      .post('/drivers/driver-1/position')
+      .send({ lat: 48.8566, lng: 2.3522, heading: 10 })
+      .expect(201);
     const position = await live.waitFor('driver_position');
     expect(position.data).toMatchObject({ driverId: 'driver-1', lat: 48.8566 });
     const eta = await live.waitFor('eta_updated');
@@ -116,7 +135,21 @@ describe('Delivery API (e2e)', () => {
     const tracking = await request(base).get('/tracking/TRK-1001').expect(200);
     expect(tracking.body.driver.lat).toBe(48.8566);
 
-    await request(base).post('/drivers/driver-1/position').send({ lat: 49.2, lng: 2.3 }).expect(201);
+    await request(base)
+      .post('/drivers/driver-1/position')
+      .send({ lat: 48.8606, lng: 2.3376 })
+      .expect(201);
+    const arrived = await live.waitFor('geofence');
+    expect(arrived.data).toMatchObject({
+      stopId: 'louvre',
+      trackingCode: 'TRK-1001',
+      type: 'enter',
+    });
+
+    await request(base)
+      .post('/drivers/driver-1/position')
+      .send({ lat: 49.2, lng: 2.3 })
+      .expect(201);
     const rerouted = await live.waitFor('route_updated');
     expect(String(rerouted.data.polyline).length).toBeGreaterThan(0);
 
@@ -125,6 +158,10 @@ describe('Delivery API (e2e)', () => {
       .send({ lat: 48.853, lng: 2.3499, label: 'Notre-Dame' })
       .expect(200);
     expect(moved.body.label).toBe('Notre-Dame');
+    await request(base)
+      .put('/tracking/TRK-1001/location')
+      .send({ lat: 49.2, lng: 2.35 })
+      .expect(400);
 
     await request(base).post('/tours/tour-paris/reverse').expect(201);
     await request(base).get('/tours/missing').expect(404);

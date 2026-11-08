@@ -1,11 +1,18 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { decodePolyline, isOffRoute } from '@tracker/geo';
+import {
+  GeofenceTracker,
+  decodePolyline,
+  insideCircle,
+  isOffRoute,
+  type LatLng,
+} from '@tracker/geo';
 import { z } from 'zod';
 import { APP_CONFIG, type AppConfig } from '../config/app-config';
 import { CLOCK, type Clock } from '../config/clock';
 import { TrackingService } from '../tracking/tracking.service';
 import { ToursService } from '../tours/tours.service';
 import { TourStore } from '../tours/tour.store';
+import type { Tour } from '../tours/tour.types';
 import { MovementThrottle, RerouteGate } from './throttle';
 
 export interface LiveClient {
@@ -30,6 +37,7 @@ export class LiveService {
   private readonly clients = new Set<LiveClient>();
   private readonly positions: MovementThrottle;
   private readonly reroutes: RerouteGate;
+  private readonly fences = new GeofenceTracker();
 
   constructor(
     private readonly store: TourStore,
@@ -38,7 +46,11 @@ export class LiveService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {
-    this.positions = new MovementThrottle(clock, config.positionMinIntervalMs, config.positionMinMoveKm);
+    this.positions = new MovementThrottle(
+      clock,
+      config.positionMinIntervalMs,
+      config.positionMinMoveKm,
+    );
     this.reroutes = new RerouteGate(clock, config.rerouteThrottleMs);
   }
 
@@ -85,6 +97,7 @@ export class LiveService {
     this.emit('driver_position', fix, (client) => this.hearsTour(client, tour.id));
 
     const current = this.store.mutable(tour.id);
+    if (current) this.watchGeofences(current, position);
     if (current?.route) {
       const line = decodePolyline(current.route.polyline);
       const offRoute = isOffRoute(position, line, this.config.offRouteKm);
@@ -101,6 +114,30 @@ export class LiveService {
     return { accepted: true };
   }
 
+  private watchGeofences(tour: Tour, position: LatLng): void {
+    const zones = tour.stops
+      .filter((stop) => stop.geofenceRadiusKm > 0)
+      .map((stop) => ({
+        id: stop.id,
+        contains: (point: LatLng) => insideCircle(point, stop, stop.geofenceRadiusKm),
+      }));
+    const transitions = new Map(
+      this.fences.update(position, zones).map((transition) => [transition.id, transition.type]),
+    );
+    for (const stop of tour.stops) {
+      const type = transitions.get(stop.id);
+      if (!type) continue;
+      stop.status = type === 'enter' ? 'arriving' : 'arrived';
+      this.emit(
+        'geofence',
+        { tourId: tour.id, stopId: stop.id, trackingCode: stop.trackingCode, type },
+        (client) =>
+          client.tourId === tour.id ||
+          (stop.trackingCode !== null && client.trackingCode === stop.trackingCode),
+      );
+    }
+  }
+
   private emitEtas(tourId: string): void {
     const tour = this.store.mutable(tourId);
     if (!tour) return;
@@ -109,7 +146,11 @@ export class LiveService {
       const snapshot = this.tracking.get(stop.trackingCode);
       this.emit(
         'eta_updated',
-        { trackingCode: stop.trackingCode, etaMin: snapshot.etaMin, distanceKm: snapshot.distanceKm },
+        {
+          trackingCode: stop.trackingCode,
+          etaMin: snapshot.etaMin,
+          distanceKm: snapshot.distanceKm,
+        },
         (client) => client.trackingCode === stop.trackingCode || client.tourId === tourId,
       );
     }

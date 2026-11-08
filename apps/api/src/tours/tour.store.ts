@@ -44,7 +44,9 @@ export class TourStore {
   reorder(tourId: string, stopIds: string[]): Tour {
     const tour = this.require(tourId);
     const byId = new Map(tour.stops.map((stop) => [stop.id, stop]));
-    const next = stopIds.map((id) => byId.get(id)).filter((stop): stop is Stop => stop !== undefined);
+    const next = stopIds
+      .map((id) => byId.get(id))
+      .filter((stop): stop is Stop => stop !== undefined);
     if (next.length !== tour.stops.length) throw new Error('Reorder must include every stop');
     tour.stops = next;
     return clone(tour);
@@ -76,5 +78,18 @@ export class TourStore {
 }
 
 function clone(tour: Tour): Tour {
-  return { ...tour, stops: tour.stops.map((stop) => ({ ...stop })), route: tour.route ? { ...tour.route, legs: tour.route.legs.map((leg) => ({ ...leg, steps: leg.steps.map((step) => ({ ...step })) })) } : null };
+  return {
+    ...tour,
+    deliveryZone: tour.deliveryZone.map((point) => ({ ...point })),
+    stops: tour.stops.map((stop) => ({ ...stop })),
+    route: tour.route
+      ? {
+          ...tour.route,
+          legs: tour.route.legs.map((leg) => ({
+            ...leg,
+            steps: leg.steps.map((step) => ({ ...step })),
+          })),
+        }
+      : null,
+  };
 }

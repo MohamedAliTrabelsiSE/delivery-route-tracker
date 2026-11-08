@@ -2,7 +2,7 @@
   "name": "@tracker/geo",
   "version": "1.0.0",
   "private": true,
-  "description": "Polyline, distance, navigation progress and stop ordering shared by the API and the app.",
+  "description": "Polyline, distance, geofences, navigation progress and stop ordering shared by the API and the app.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

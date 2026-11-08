@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { loadConfig } from '../config/app-config';
 import { OsrmRouter } from '../routing/osrm-router';
 import { RoutingService } from '../routing/routing.service';
@@ -7,7 +7,11 @@ import { TourStore } from '../tours/tour.store';
 import { ToursService } from '../tours/tours.service';
 import { TrackingService } from './tracking.service';
 
-async function tracking(): Promise<{ service: TrackingService; store: TourStore; tours: ToursService }> {
+async function tracking(): Promise<{
+  service: TrackingService;
+  store: TourStore;
+  tours: ToursService;
+}> {
   const store = new TourStore();
   const tours = new ToursService(
     store,
@@ -19,7 +23,11 @@ async function tracking(): Promise<{ service: TrackingService; store: TourStore;
     ),
   );
   await tours.onModuleInit();
-  return { service: new TrackingService(store, tours, loadConfig({ AVERAGE_SPEED_KMH: '25' })), store, tours };
+  return {
+    service: new TrackingService(store, tours, loadConfig({ AVERAGE_SPEED_KMH: '25' })),
+    store,
+    tours,
+  };
 }
 
 describe('TrackingService', () => {
@@ -35,7 +43,13 @@ describe('TrackingService', () => {
   it('shrinks the remaining line once the driver is on the road', async () => {
     const { service, store } = await tracking();
     const full = service.get('TRK-1006').distanceKm;
-    store.setFix({ driverId: 'driver-1', tourId: 'tour-paris', lat: 48.8448, lng: 2.3735, at: 't' });
+    store.setFix({
+      driverId: 'driver-1',
+      tourId: 'tour-paris',
+      lat: 48.8448,
+      lng: 2.3735,
+      at: 't',
+    });
     const snapshot = service.get('TRK-1006');
     expect(snapshot.driver?.lat).toBeCloseTo(48.8448, 4);
     expect(snapshot.distanceKm).toBeLessThan(full);
@@ -46,6 +60,21 @@ describe('TrackingService', () => {
     const updated = await service.setLocation('TRK-1001', 48.853, 2.3499, 'Notre-Dame');
     expect(updated.label).toBe('Notre-Dame');
     expect(updated.destination).toEqual({ lat: 48.853, lng: 2.3499 });
+  });
+
+  it('rejects a pin outside the delivery zone and allows one when the zone is empty', async () => {
+    const { service, store } = await tracking();
+    await expect(service.setLocation('TRK-1001', 49.2, 2.35, 'Too far')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(service.get('TRK-1001').destination.lat).toBeCloseTo(48.8606, 3);
+
+    const tour = store.mutable('tour-paris');
+    if (!tour) throw new Error('missing tour');
+    tour.deliveryZone = [];
+    const moved = await service.setLocation('TRK-1001', 49.2, 2.35, 'Allowed');
+    expect(moved.destination).toEqual({ lat: 49.2, lng: 2.35 });
+    expect(moved.geofenceRadiusKm).toBeGreaterThan(0);
   });
 
   it('rejects an unknown code', async () => {
